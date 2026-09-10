@@ -792,47 +792,55 @@ async function imageToThumbRgb(
     );
   }
 
-  let bitmap: ImageBitmap;
-  if (typeof source === "string") {
-    const blob = await (await fetch(source)).blob();
-    bitmap = await createImageBitmap(blob);
-  } else if (source instanceof Blob) {
-    bitmap = await createImageBitmap(source);
-  } else if ((source as ImageBitmap).width !== undefined && (source as ImageBitmap).close) {
-    bitmap = source as ImageBitmap;
-  } else {
-    bitmap = await createImageBitmap(source as HTMLImageElement);
-  }
+  let bitmap: ImageBitmap | undefined;
+  let ownsBitmap = false;
+  try {
+    if (typeof source === "string") {
+      const blob = await (await fetch(source)).blob();
+      bitmap = await createImageBitmap(blob);
+      ownsBitmap = true;
+    } else if (source instanceof Blob) {
+      bitmap = await createImageBitmap(source);
+      ownsBitmap = true;
+    } else if ((source as ImageBitmap).width !== undefined && (source as ImageBitmap).close) {
+      bitmap = source as ImageBitmap;
+    } else {
+      bitmap = await createImageBitmap(source as HTMLImageElement);
+      ownsBitmap = true;
+    }
 
-  const sw = bitmap.width;
-  const sh = bitmap.height;
-  let w: number, h: number;
-  const longest = Math.max(sw, sh);
-  if (longest <= target) {
-    w = sw;
-    h = sh;
-  } else if (sw >= sh) {
-    w = target;
-    h = Math.max(1, Math.round((target * sh) / sw));
-  } else {
-    h = target;
-    w = Math.max(1, Math.round((target * sw) / sh));
-  }
+    const sw = bitmap.width;
+    const sh = bitmap.height;
+    let w: number, h: number;
+    const longest = Math.max(sw, sh);
+    if (longest <= target) {
+      w = sw;
+      h = sh;
+    } else if (sw >= sh) {
+      w = target;
+      h = Math.max(1, Math.round((target * sh) / sw));
+    } else {
+      h = target;
+      w = Math.max(1, Math.round((target * sw) / sh));
+    }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("arthash.encodeImage: 2D canvas context unavailable");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  const { data } = ctx.getImageData(0, 0, w, h);
-  const rgb = new Uint8Array(w * h * 3);
-  for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
-    rgb[j] = data[i]!;
-    rgb[j + 1] = data[i + 1]!;
-    rgb[j + 2] = data[i + 2]!;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("arthash.encodeImage: 2D canvas context unavailable");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
+      rgb[j] = data[i]!;
+      rgb[j + 1] = data[i + 1]!;
+      rgb[j + 2] = data[i + 2]!;
+    }
+    return { rgb, w, h };
+  } finally {
+    if (ownsBitmap) bitmap?.close();
   }
-  return { rgb, w, h };
 }
